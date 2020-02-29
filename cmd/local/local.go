@@ -5,7 +5,6 @@ import (
 	"flag"
 	"fmt"
 	"github.com/myproxy/src"
-	"io"
 	"io/ioutil"
 	"log"
 	"net"
@@ -62,40 +61,7 @@ func main() {
 			log.Printf("读取错误:%s",err)
 		}
 
-		//go handler(conn)
-		go proxy.RemoteHandler(conn)
-	}
-}
-
-func handler(conn net.Conn)  {
-	defer conn.Close()
-	var b = make([]byte,255)
-
-	for {
-		n,err := conn.Read(b)
-		if err != nil{
-			if err != io.EOF{
-				log.Println(err)
-				return
-			}
-			return
-		}
-
-		log.Printf("[success] read from:%s,len:%d,content:\n%s",conn	.RemoteAddr(),n,b[:n])
-
-		n2,err := conn.Write(b[:n])
-		if err !=nil{
-			log.Printf("[err]: write remote :%s,len:%d,err:%s",conn.RemoteAddr(),n2,b[:n])
-		}
-
-
-		//log.Printf("[success]: write remote :%s,len:%d,content\n:%s",conn.RemoteAddr(),n2,b[:n])
-
-		//remoteAddr,err := net.ResolveTCPAddr("tcp",proxy.GetRemoteAddr())
-		//if err != nil{
-		//
-		//}
-		//remote,err := net.DialTCP("tcp",nil,l.re)
+		go proxy.RemoteHandler(&conn)
 	}
 }
 

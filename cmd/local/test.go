@@ -4,7 +4,6 @@ import (
 	"flag"
 	"github.com/myproxy/src"
 	"log"
-	"os"
 )
 
 func main() {
@@ -14,8 +13,8 @@ func main() {
 	flag.Parse()
 
 	if pwd == "" {
-		log.Printf("密码为空")
-		os.Exit(0)
+		//log.Printf("密码为空")
+		//os.Exit(0)
 	}
 
 	var proxy = src.Proxy{
@@ -25,7 +24,7 @@ func main() {
 	}
 
 	log.Println(src.StrToByte256(pwd))
-	proxy.ParsePwd()
+	proxy.GeneratePwd()
 	data := []byte(str)
 	proxy.Encode(data)
 	log.Println("encode:",string(data))
