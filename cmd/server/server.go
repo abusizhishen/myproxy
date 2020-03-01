@@ -35,7 +35,7 @@ func init() {
 		os.Exit(0)
 	}
 
-	proxy.ParsePwd()
+	src.Coder.Init(proxy.Password)
 	log.Printf("listen on:%s\npassword:%s",proxy.GetRemoteAddr(),proxy.Password)
 }
 
@@ -55,7 +55,7 @@ func main() {
 	log.Printf("listen: %s",addr)
 
 	for {
-		conn,err := listen.Accept()
+		conn,err := listen.AcceptTCP()
 		if err != nil{
 			log.Printf("读取错误:%s",err)
 		}
@@ -65,7 +65,7 @@ func main() {
 		//var b = make([]byte,256)
 		//n,err := conn.Read(b)
 		//log.Printf("[success]: read remote:content\n %s,len:%d",b[:n],n)
-		go proxy.DoRequestAndReturn(&conn)
+		go src.DoRequestAndReturn(src.GetTCPConn(conn))
 	}
 }
 

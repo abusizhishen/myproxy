@@ -37,7 +37,7 @@ func init() {
 		os.Exit(0)
 	}
 
-	proxy.ParsePwd()
+	src.Coder.Init(proxy.Password)
 }
 
 func main() {
@@ -49,6 +49,7 @@ func main() {
 	s := addr.Network()
 	log.Print(s)
 	listen,err := net.ListenTCP("tcp",addr)
+
 	if err != nil{
 		panic(err)
 	}
@@ -56,12 +57,12 @@ func main() {
 	log.Printf("listen: %s",addr)
 
 	for {
-		conn,err := listen.Accept()
+		conn,err := listen.AcceptTCP()
 		if err != nil{
 			log.Printf("读取错误:%s",err)
 		}
 
-		go proxy.RemoteHandler(&conn)
+		go proxy.RemoteHandler(src.GetTCPConn(conn))
 	}
 }
 
