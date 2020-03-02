@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"github.com/myproxy/src"
+	"github.com/abusizhishen/myproxy/src"
 	"io/ioutil"
 	"log"
 	"net"
