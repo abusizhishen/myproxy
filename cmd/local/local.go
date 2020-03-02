@@ -8,7 +8,6 @@ import (
 	"io/ioutil"
 	"log"
 	"net"
-	"net/http"
 	"os"
 )
 
@@ -18,6 +17,8 @@ var (
 )
 
 func init() {
+	log.SetFlags(log.Lshortfile)
+
 	flag.StringVar(&config, "config", "config.json","配置文件")
 	flag.Parse()
 
@@ -46,8 +47,6 @@ func main() {
 		panic(err)
 	}
 
-	s := addr.Network()
-	log.Print(s)
 	listen,err := net.ListenTCP("tcp",addr)
 
 	if err != nil{
@@ -57,20 +56,15 @@ func main() {
 	log.Printf("listen: %s",addr)
 
 	for {
-		conn,err := listen.AcceptTCP()
+		userConn,err := listen.AcceptTCP()
 		if err != nil{
 			log.Printf("读取错误:%s",err)
+			continue
 		}
 
-		go proxy.RemoteHandler(src.GetTCPConn(conn))
+
+		// localConn被关闭时直接清除所有数据 不管没有发送的数据
+		//userConn.SetLinger(0)
+		go proxy.RemoteHandler(src.GetTCPConn(userConn))
 	}
 }
-
-func x()  {
-	http.Handle("/test/", http.FileServer(http.Dir("/home/work/"))) ///home/work/test/中必须有内容
-	http.Handle("/download/", http.StripPrefix("/download/", http.FileServer(http.Dir("/home/work/"))))
-	http.Handle("/tmpfiles/", http.StripPrefix("/tmpfiles/", http.FileServer(http.Dir("/tmp")))) //127.0.0.1:9999/tmpfiles/访问的本地文件/tmp中的内容
-	http.ListenAndServe(":9999", nil)
-}
-
-

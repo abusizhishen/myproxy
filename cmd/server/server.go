@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"flag"
+	"fmt"
 	"github.com/myproxy/src"
 	"io/ioutil"
 	"log"
@@ -16,6 +17,8 @@ var (
 )
 
 func init() {
+	log.SetFlags(log.Lshortfile)
+
 	flag.StringVar(&config, "config", "config.json","配置文件")
 	flag.Parse()
 
@@ -36,11 +39,11 @@ func init() {
 	}
 
 	src.Coder.Init(proxy.Password)
-	log.Printf("listen on:%s\npassword:%s",proxy.GetRemoteAddr(),proxy.Password)
+	log.Printf("listen on:%d\npassword:%s",proxy.RemotePort,proxy.Password)
 }
 
 func main() {
-	addr,err := net.ResolveTCPAddr("tcp",proxy.GetRemoteAddr())
+	addr,err := net.ResolveTCPAddr("tcp",fmt.Sprintf(":%d",proxy.RemotePort))
 	if err != nil{
 		panic(err)
 	}
@@ -55,17 +58,19 @@ func main() {
 	log.Printf("listen: %s",addr)
 
 	for {
-		conn,err := listen.AcceptTCP()
+		clientConn,err := listen.AcceptTCP()
 		if err != nil{
 			log.Printf("读取错误:%s",err)
+			continue
 		}
 
-		//go handler(nn, &proxy)
-		log.Printf("new conn:%s", conn.RemoteAddr())
-		//var b = make([]byte,256)
-		//n,err := conn.Read(b)
-		//log.Printf("[success]: read remote:content\n %s,len:%d",b[:n],n)
-		go src.DoRequestAndReturn(src.GetTCPConn(conn))
+		// localConn被关闭时直接清除所有数据 不管没有发送的数据
+		//clientConn.SetLinger(0)
+		log.Printf("new conn:%s", clientConn.RemoteAddr())
+		//var buf = make([]byte,256)
+		//n,err := clientConn.Read(buf)
+		//log.Printf("read len%d,content:%s,err:%v",n,buf[:n],err)
+		go src.DoRequestAndReturn(src.GetTCPConn(clientConn))
 	}
 }
 

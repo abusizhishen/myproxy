@@ -17,9 +17,9 @@ type Proxy struct {
 	Local *net.TCPAddr
 	Server *net.TCPAddr
 	LocalAddr string `json:"local_addr"`
-	LocalPort int16 `json:"local_port"`
+	LocalPort int `json:"local_port"`
 	RemoteAddr string `json:"remote_addr"`
-	RemotePort int16 `json:"remote_port"`
+	RemotePort int `json:"remote_port"`
 	//Method string
 	Password string `json:"password"`
 	encodeKey password
@@ -66,75 +66,71 @@ func StrToByte256(string2 string) [32]byte {
 }
 
 var addr = "%s:%d"
-func (p Proxy)GetRemoteAddr()string {
-	return fmt.Sprintf(addr, p.RemoteAddr,p.RemotePort)
+func (p Proxy)GetRemoteAddr()(*TCPConn,error) {
+	connAddr,err := net.ResolveTCPAddr("tcp",fmt.Sprintf(addr,p.RemoteAddr,p.RemotePort))
+	if err != nil{
+		return nil,fmt.Errorf("connert remote add%s",err)
+	}
+
+	dst,err := net.DialTCP("tcp",nil,connAddr)
+	if err != nil{
+		return nil,err
+	}
+
+	return GetTCPConn(dst),nil
+}
+
+func (p Proxy)GetTargetAddr(addr string)(*TCPConn,error) {
+	connAddr,err := net.ResolveTCPAddr("tcp",addr)
+	if err != nil{
+		log.Printf("connert remote add%s",err)
+		return nil,err
+	}
+
+	drs,err := net.DialTCP("tcp",nil,connAddr)
+	if err != nil{
+		log.Printf("connert remote err%s",err)
+		return nil,err
+	}
+
+	return GetTCPConn(drs),nil
 }
 
 func (p Proxy)GetLocalAddr()string {
 	return fmt.Sprintf(addr, p.LocalAddr,p.LocalPort)
 }
 
-func (p Proxy)RemoteHandler(conn *TCPConn)  {
-	defer conn.Close()
-	connAddr,err := net.ResolveTCPAddr("tcp",p.GetRemoteAddr())
-	if err != nil{
-		log.Printf("connert remote add%s",err)
-		return
-	}
-
-	log.Printf("创建远程连接")
-	drs,err := net.DialTCP("tcp",nil,connAddr)
+func (p Proxy)RemoteHandler(userConn *TCPConn)  {
+	defer userConn.Close()
+	drs,err := p.GetRemoteAddr()
 	if err != nil{
 		log.Printf("connert remote err%s",err)
 		return
 	}
 
+	//log.Printf("远程连接成功：%v")
 	defer drs.Close()
-	rmt := &TCPConn{drs, &Coder,}
+	proxy := &TCPConn{drs, &Coder,}
 
+	log.Printf("异步读取客户端数据")
 	go func() {
-		var b = make([]byte,1024)
-		for{
-			n,err := conn.Read(b)
-			if err != nil{
-				if err == io.EOF{
-					return
-				}
-				log.Printf("[err]: read client:err %s",err)
-				return
-			}
-
-			log.Printf("content:%s",b[:n])
-			_,err = rmt.EncodeWrite(b[:n])
-			if err != nil{
-				log.Printf("[err]: write remote:err %s",err)
-				continue
-			}
+		err = proxy.CopyTo(userConn,OperateDecode)
+		if err != nil{
+			log.Printf("read server err :%s",err)
+			proxy.Close()
+			userConn.Close()
 		}
 	}()
 
-	var b = make([]byte,1024)
-	for{
-		n,err := rmt.Read(b)
-		if err != nil{
-			if err == io.EOF{
-				return
-			}
-			log.Printf("[err]: read server:err %s",err)
-			return
-		}
-
-		log.Printf("remote receive:%s",b[:n])
-		_,err = conn.DecodeWrite(b[:n])
-		if err != nil{
-			log.Printf("[err]: write remote:err %s",err)
-			continue
-		}
+	log.Printf("客户端数据写入远程代理")
+	err = userConn.CopyTo(proxy,OperateEncode)
+	if err != nil{
+		log.Printf("write to server err :%s",err)
 	}
 }
 
-func DoRequestAndReturn(conn *TCPConn)  {
-	defer conn.Close()
+func DoRequestAndReturn(clientConn *TCPConn)  {
+	defer clientConn.Close()
 	buf := make([]byte, 256)
 
 	/**
@@ -150,13 +146,10 @@ func DoRequestAndReturn(conn *TCPConn)  {
 	   appear in the METHODS field.
 	*/
 	// 第一个字段VER代表Socks的版本，Socks5默认为0x05，其固定长度为1个字节
-	_, err := conn.DecodeRead(buf)
-
+	_, err := clientConn.DecodeRead(buf)
 	// 只支持版本5
 	if err != nil || buf[0] != 0x05 {
-		log.Printf(" err != nil || buf[0] != 0x05 %s,bug[0]:%d",err,buf[0])
-		log.Printf("%d,%d",conn.encode[buf[0]],conn.decode[buf[0]])
-		log.Printf("%v\n%v",conn.encode,conn.decode)
+		log.Printf(" err %v,buf[0] :%d",err,buf[0])
 		return
 	}
 
@@ -171,7 +164,7 @@ func DoRequestAndReturn(conn *TCPConn)  {
 		          +----+--------+
 	*/
 	// 不需要验证，直接验证通过
-	conn.EncodeWrite([]byte{0x05, 0x00})
+	clientConn.EncodeWrite([]byte{0x05, 0x00})
 
 	/**
 	  +----+-----+-------+------+----------+----------+
@@ -182,9 +175,10 @@ func DoRequestAndReturn(conn *TCPConn)  {
 	*/
 
 	// 获取真正的远程服务的地址
-	n, err := conn.DecodeRead(buf)
+	n, err := clientConn.DecodeRead(buf)
 	// n 最短的长度为7 情况为 ATYP=3 DST.ADDR占用1字节 值为0x0
 	if err != nil || n < 7 {
+		log.Println("eeee")
 		return
 	}
 
@@ -192,6 +186,7 @@ func DoRequestAndReturn(conn *TCPConn)  {
 	// CONNECT X'01'
 	if buf[1] != 0x01 {
 		// 目前只支持 CONNECT
+		log.Println("CONNECT",buf[1])
 		return
 	}
 
@@ -212,6 +207,7 @@ func DoRequestAndReturn(conn *TCPConn)  {
 		//	IP V6 address: X'04'
 		dIP = buf[4 : 4+net.IPv6len]
 	default:
+		log.Printf("unknown buf[3]:%v",buf[3])
 		return
 	}
 	dPort := buf[n-2:]
@@ -220,6 +216,7 @@ func DoRequestAndReturn(conn *TCPConn)  {
 		Port: int(binary.BigEndian.Uint16(dPort)),
 	}
 
+	log.Printf("remote:%s",dstAddr)
 	// 连接真正的远程服务
 	dstServer, err := net.DialTCP("tcp", nil, dstAddr)
 	if err != nil {
@@ -238,61 +235,22 @@ func DoRequestAndReturn(conn *TCPConn)  {
 		  +----+-----+-------+------+----------+----------+
 		*/
 		// 响应客户端连接成功
-		conn.EncodeWrite([]byte{0x05, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
+		clientConn.EncodeWrite([]byte{0x05, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
 	}
 
 	rmt := &TCPConn{dstServer, &Coder,
 	}
-	conn.Write([]byte{0x05, 0x00})
+	clientConn.EncodeWrite([]byte{0x05, 0x00})
 
 	go func() {
-		defer func() {
-			log.Println("read end close")
-		}()
-		defer (*conn).Close()
-		var b = make([]byte,1024)
-		for{
-			n,err := (*conn).Read(b)
-			if err != nil{
-				if err == io.EOF{
-					//(*conn).Read([]byte("bye byeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"))
-					return
-				}
-				log.Printf("[err]: read client :err %s",err)
-				return
-			}
-
-			if n > 0 {
-				_,err = rmt.DecodeWrite(b[:n])
-				if err != nil{
-					log.Printf("write remote err:%s",err)
-					return
-				}
-			}
-		}
+		rmt.CopyTo(clientConn,OperateEncode)
+		rmt.Close()
+		clientConn.Close()
 	}()
 
-	var b = make([]byte,1024)
-	for{
-		n,err := rmt.Read(b)
-		if err != nil{
-			if err == io.EOF{
-				log.Printf("rmt read end")
-				return
-			}
-			log.Printf("[err]: read real server:err %s",err)
-			return
-		}
-
-		if n < 0 {
-			return
-		}
-		log.Printf("get resp: %s",b[:n])
-		_,err = conn.EncodeWrite(b[:n])
-		if err != nil{
-			log.Printf("[err]: write remote:err %s",err)
-			return
-		}
+	err = clientConn.CopyTo(rmt,OperateDecode)
+	if err != nil{
+		log.Printf("真是请求出错:%s",err)
 	}
 }
 
@@ -302,28 +260,68 @@ type TCPConn struct {
 	*Code
 }
 
-func (t *TCPConn)EncodeWrite(data []byte)(int,error)  {
-	t.Encode(data)
-	return t.Write(data)
+func (from *TCPConn)EncodeWrite(data []byte)(int,error)  {
+	from.Encode(data)
+	return from.Write(data)
 }
 
-func (t *TCPConn)DecodeWrite(data []byte)(int,error)  {
-	t.Decode(data)
-	return t.Write(data)
+func (from *TCPConn)DecodeWrite(data []byte)(int,error)  {
+	from.Decode(data)
+	return from.Write(data)
 }
 
-func (t *TCPConn)DecodeRead(data []byte) (n int,err error) {
-	n,err = t.Read(data)
+func (from *TCPConn)DecodeRead(data []byte) (n int,err error) {
+	n,err = from.Read(data)
 	if err != nil{
 		return
 	}
-	t.Decode(data[:n])
-
+//	log.Printf("%v",data)
+	from.Decode(data[:n])
 	return
 }
 
 func GetTCPConn(conn *net.TCPConn) *TCPConn {
-	return &TCPConn{conn, &Coder,
+	return &TCPConn{conn, &Coder,}
+}
+
+const (
+	OperateDefault = 0
+	OperateEncode = 1
+	OperateDecode = 2
+)
+
+func (from *TCPConn)CopyTo(to *TCPConn,operateType int)error  {
+	var b = make([]byte,1024)
+
+	for{
+		readCount,err := from.Read(b)
+		if err != nil{
+			if err == io.EOF{
+				return nil
+			}
+			return fmt.Errorf("[err]: read err to err %s",err)
+		}
+
+		log.Printf("read content\n %s",b[:readCount])
+		if readCount > 0 {
+			var writeCount int
+			var err error
+			switch operateType {
+			case OperateDefault:
+				writeCount,err = to.Write(b[:readCount])
+			case OperateEncode:
+				writeCount,err = to.EncodeWrite(b[:readCount])
+			case OperateDecode:
+				writeCount,err = to.DecodeWrite(b[:readCount])
+			}
+			if err != nil{
+				return fmt.Errorf("[err]: write remote:err %s",err)
+			}
+
+			if readCount != writeCount{
+				return fmt.Errorf("[err]: write remote读写不一致")
+			}
+		}
 	}
 }
 
@@ -340,7 +338,7 @@ func (c *Code)Encode(b []byte)  {
 
 func (c *Code)Decode(b []byte)  {
 	for i,v := range b{
-		b[i] = c.encode[v]
+		b[i] = c.decode[v]
 	}
 }
 
@@ -350,16 +348,26 @@ func (c *Code)Init(passwd string)  {
 		log.Printf("密码解析错误：%s, passwd:%s",err,passwd)
 		os.Exit(0)
 	}
+
 	c.decode = &password{}
 	c.encode = &password{}
-	for i:=0;i<len(b);i++{
-		v := b[i]
+	for i,v := range b{
 		c.encode[i] = v
 		c.decode[v] = byte(i)
 	}
+
+	log.Printf("password:\n%v,encode\n%v,decode\n%v",b,c.encode,c.decode)
 }
 
 var Coder = Code{
 	encode: nil,
 	decode: nil,
+}
+
+func Decode(data []byte)  {
+	Coder.Decode(data)
+}
+
+func Encode(data []byte)  {
+	Coder.Encode(data)
 }
