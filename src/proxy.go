@@ -112,21 +112,13 @@ func (p Proxy)RemoteHandler(userConn *TCPConn)  {
 	defer drs.Close()
 	proxy := &TCPConn{drs, &Coder,}
 
-	log.Printf("异步读取客户端数据")
+	//log.Printf("异步读取客户端数据")
 	go func() {
-		err = proxy.CopyTo(userConn,OperateDecode)
-		if err != nil{
-			log.Printf("read server err :%s",err)
-			//proxy.Close()
-			//userConn.Close()
-		}
+		proxy.CopyTo(userConn,OperateDecode)
 	}()
 
-	log.Printf("客户端数据写入远程代理")
+	//log.Printf("客户端数据写入远程代理")
 	err = userConn.CopyTo(proxy,OperateEncode)
-	if err != nil{
-		log.Printf("write to server err :%s",err)
-	}
 }
 
 func DoRequestAndReturn(clientConn *TCPConn)  {
@@ -215,7 +207,7 @@ func DoRequestAndReturn(clientConn *TCPConn)  {
 		Port: int(binary.BigEndian.Uint16(dPort)),
 	}
 
-	log.Printf("remote:%s",dstAddr)
+//	log.Printf("remote:%s",dstAddr)
 	// 连接真正的远程服务
 	dstServer, err := net.DialTCP("tcp", nil, dstAddr)
 	if err != nil {
@@ -299,7 +291,6 @@ func (from *TCPConn)CopyTo(to *TCPConn,operateType int)error  {
 			return fmt.Errorf("[err]: read err to err %s",err)
 		}
 
-		log.Printf("read content\n %s",b[:readCount])
 		if readCount > 0 {
 			var writeCount int
 			var err error
@@ -353,7 +344,7 @@ func (c *Code)Init(passwd string)  {
 		c.decode[v] = byte(i)
 	}
 
-	log.Printf("password:\n%v,encode\n%v,decode\n%v",b,c.encode,c.decode)
+	//log.Printf("password:\n%v,encode\n%v,decode\n%v",b,c.encode,c.decode)
 }
 
 var Coder = Code{
