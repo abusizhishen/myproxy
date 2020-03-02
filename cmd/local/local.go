@@ -64,7 +64,7 @@ func main() {
 
 
 		// localConn被关闭时直接清除所有数据 不管没有发送的数据
-		//userConn.SetLinger(0)
+		userConn.SetLinger(0)
 		go proxy.RemoteHandler(src.GetTCPConn(userConn))
 	}
 }

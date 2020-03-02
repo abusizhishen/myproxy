@@ -117,8 +117,8 @@ func (p Proxy)RemoteHandler(userConn *TCPConn)  {
 		err = proxy.CopyTo(userConn,OperateDecode)
 		if err != nil{
 			log.Printf("read server err :%s",err)
-			proxy.Close()
-			userConn.Close()
+			//proxy.Close()
+			//userConn.Close()
 		}
 	}()
 
@@ -186,7 +186,6 @@ func DoRequestAndReturn(clientConn *TCPConn)  {
 	// CONNECT X'01'
 	if buf[1] != 0x01 {
 		// 目前只支持 CONNECT
-		log.Println("CONNECT",buf[1])
 		return
 	}
 
@@ -238,14 +237,12 @@ func DoRequestAndReturn(clientConn *TCPConn)  {
 		clientConn.EncodeWrite([]byte{0x05, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
 	}
 
-	rmt := &TCPConn{dstServer, &Coder,
-	}
-	clientConn.EncodeWrite([]byte{0x05, 0x00})
+	rmt := &TCPConn{dstServer, &Coder,}
 
 	go func() {
 		rmt.CopyTo(clientConn,OperateEncode)
-		rmt.Close()
-		clientConn.Close()
+		//rmt.Close()
+		//clientConn.Close()
 	}()
 
 	err = clientConn.CopyTo(rmt,OperateDecode)

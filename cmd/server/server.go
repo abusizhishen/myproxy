@@ -65,11 +65,8 @@ func main() {
 		}
 
 		// localConn被关闭时直接清除所有数据 不管没有发送的数据
-		//clientConn.SetLinger(0)
+		clientConn.SetLinger(0)
 		log.Printf("new conn:%s", clientConn.RemoteAddr())
-		//var buf = make([]byte,256)
-		//n,err := clientConn.Read(buf)
-		//log.Printf("read len%d,content:%s,err:%v",n,buf[:n],err)
 		go src.DoRequestAndReturn(src.GetTCPConn(clientConn))
 	}
 }
