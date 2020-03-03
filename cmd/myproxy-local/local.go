@@ -11,8 +11,6 @@ import (
 	"os"
 )
 
-//appid : 1001407
-//appkey: b47fnVaxOoSIGhXZ
 var (
 	config string
 	proxy src.Proxy
