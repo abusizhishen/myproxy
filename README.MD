@@ -17,7 +17,8 @@
 #####  2.服务端```go run cmd/myproxy-server/server.go --config=config.json```
 #####  3.客户端 ```go run cmd/myproxy-local/local.go  --config=config.json```
 #### 2.TODO
-- [x]开发完成可以使用
+
+- [x] 开发完成可以使用
 - [ ] PAC支持
-- [ ]HTTPS 支持
-- [ ]MAC客户端、IOS APP
+- [ ] HTTPS 支持
+- [ ] MAC客户端、IOS APP
