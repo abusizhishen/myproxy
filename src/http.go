@@ -1,29 +1,34 @@
-package main
+package src
 
 import (
+	"bufio"
 	"encoding/binary"
+	"io/ioutil"
 	"log"
 	"net"
+	"net/http"
+	"strings"
 )
 
 func main() {
-	addr,err := net.ResolveTCPAddr("tcp","0.0.0.0:9090")
-	listen,err := net.ListenTCP("tcp",addr)
-	if err != nil{
+	addr, err := net.ResolveTCPAddr("tcp", "0.0.0.0:9090")
+	listen, err := net.ListenTCP("tcp", addr)
+	if err != nil {
 		panic(err)
 	}
 
-	for{
-		conn,err := listen.AcceptTCP()
-		if err != nil{
+	for {
+		conn, err := listen.AcceptTCP()
+		if err != nil {
 			continue
 		}
 
-		go handler(conn)
+		//go handlerSocks(conn)
+		go handlerHttp(conn)
 	}
 }
 
-func handler(clientConn *net.TCPConn)  {
+func handlerSocks(clientConn *net.TCPConn) {
 	defer clientConn.Close()
 	buf := make([]byte, 256)
 
@@ -43,7 +48,7 @@ func handler(clientConn *net.TCPConn)  {
 	_, err := clientConn.Read(buf)
 	// 只支持版本5
 	if err != nil || buf[0] != 0x05 {
-		log.Printf(" err %v,buf[0] :%d",err,buf[0])
+		log.Printf(" err %v,buf[0] :%d", err, buf[0])
 		return
 	}
 
@@ -58,8 +63,8 @@ func handler(clientConn *net.TCPConn)  {
 		          +----+--------+
 	*/
 	// 不需要验证，直接验证通过
-	n,err := clientConn.Write([]byte{0x05, 0x00})
-	log.Printf("len,%d,err:%v",n,err)
+	n, err := clientConn.Write([]byte{0x05, 0x00})
+	log.Printf("len,%d,err:%v", n, err)
 
 	/**
 	  +----+-----+-------+------+----------+----------+
@@ -101,7 +106,7 @@ func handler(clientConn *net.TCPConn)  {
 		//	IP V6 address: X'04'
 		dIP = buf[4 : 4+net.IPv6len]
 	default:
-		log.Printf("unknown buf[3]:%v",buf[3])
+		log.Printf("unknown buf[3]:%v", buf[3])
 		return
 	}
 	dPort := buf[n-2:]
@@ -111,13 +116,49 @@ func handler(clientConn *net.TCPConn)  {
 	}
 
 	log.Println(dstAddr)
-	buf = make([]byte,1024)
+	buf = make([]byte, 1024)
 	for {
-		var n,err = clientConn.Read(buf)
-		if err != nil{
+		var n, err = clientConn.Read(buf)
+		if err != nil {
 			return
 		}
 
-		log.Printf("read content\n%s",buf[:n])
+		log.Printf("read content\n%s", buf[:n])
+	}
+}
+
+func handlerHttp(clientConn *net.TCPConn) {
+	buf := make([]byte, 1024)
+	defer clientConn.Close()
+	for {
+		var n, err = clientConn.Read(buf)
+		if err != nil {
+			return
+		}
+
+		var s = bufio.NewReader(strings.NewReader(string(buf[:n])))
+		req, err := http.ReadRequest(s)
+		if err != nil {
+			log.Println(err)
+			return
+		}
+
+		req.RequestURI = ""
+		var c = &http.Client{}
+		resp, err := c.Do(req)
+		if err != nil {
+			log.Println(err)
+			return
+		}
+
+		body, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			log.Println(err)
+			return
+		}
+
+		resp.Body.Close()
+		clientConn.Write(body)
+		break
 	}
 }
