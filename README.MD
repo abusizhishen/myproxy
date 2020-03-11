@@ -1,5 +1,5 @@
 # myproxy
-
+参考 [lightsocks](https://github.com/gwuhaolin/lightsocks)
 ### 基于socks5实现的翻墙工具
 #### 1.使用方式
 #####  1.配置文件
@@ -21,4 +21,3 @@
 - [x] 开发完成可以使用
 - [ ] PAC支持
 - [ ] HTTPS 支持
-- [ ] MAC客户端、IOS APP
