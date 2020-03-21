@@ -10,7 +10,12 @@ import (
 	"strings"
 )
 
-func main() {
+type HttpProxy struct {
+	*http.Request
+	*http.Response
+}
+
+func (h *HttpProxy)Server() {
 	addr, err := net.ResolveTCPAddr("tcp", "0.0.0.0:9090")
 	listen, err := net.ListenTCP("tcp", addr)
 	if err != nil {
@@ -24,11 +29,11 @@ func main() {
 		}
 
 		//go handlerSocks(conn)
-		go handlerHttp(conn)
+		go h.HandlerHttp(conn)
 	}
 }
 
-func handlerSocks(clientConn *net.TCPConn) {
+func HandlerSocks(clientConn *net.TCPConn) {
 	defer clientConn.Close()
 	buf := make([]byte, 256)
 
@@ -127,7 +132,7 @@ func handlerSocks(clientConn *net.TCPConn) {
 	}
 }
 
-func handlerHttp(clientConn *net.TCPConn) {
+func (h *HttpProxy)HandlerHttp(clientConn *net.TCPConn, ) {
 	buf := make([]byte, 1024)
 	defer clientConn.Close()
 	for {
