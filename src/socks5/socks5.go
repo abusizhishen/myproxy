@@ -1,4 +1,4 @@
-package src
+package socks5
 
 import (
 	"crypto/sha256"
@@ -175,7 +175,6 @@ func DoRequestAndReturn(clientConn *TCPConn)  {
 	n, err := clientConn.DecodeRead(buf)
 	// n 最短的长度为7 情况为 ATYP=3 DST.ADDR占用1字节 值为0x0
 	if err != nil || n < 7 {
-		log.Println("eeee")
 		return
 	}
 
@@ -244,7 +243,7 @@ func DoRequestAndReturn(clientConn *TCPConn)  {
 
 	err = clientConn.CopyTo(rmt,OperateDecode)
 	if err != nil{
-		log.Printf("真是请求出错:%s",err)
+		log.Printf("真实请求出错:%s",err)
 	}
 }
 
@@ -369,11 +368,16 @@ func Init() Proxy{
 	var proxy Proxy
 	var config string
 	log.SetFlags(log.Lshortfile)
-	homeDir,_ := os.UserHomeDir()
+	homeDir,err := os.UserHomeDir()
+	if err != nil{
+		log.Printf("用户home目录获取出错:%s",err)
+		os.Exit(0)
+	}
 	defaultConfig := path.Join(homeDir,"myproxy.json")
 	flag.StringVar(&config, "config", defaultConfig,"配置文件")
 	flag.Parse()
 
+	log.Printf("配置文件目录:%s",config)
 	f,err := os.Open(config)
 	if err != nil{
 		log.Printf("打开配置文件错误：%s",err)
