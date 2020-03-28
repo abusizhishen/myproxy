@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	"github.com/abusizhishen/myproxy/src"
+	src "github.com/abusizhishen/myproxy/src/socks5"
 	"log"
 	"net"
 )

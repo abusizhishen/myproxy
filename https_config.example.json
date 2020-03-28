@@ -1,0 +1,8 @@
+{
+    "server_addr":"your domain",
+    "server_port":8005,
+    "local_addr":"127.0.0.1",
+    "local_port":8004,
+    "https":true,
+    "timeout":3
+}
