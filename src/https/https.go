@@ -13,7 +13,6 @@ import (
 func Server()  {
 	g := gin.New()
 	g.GET("/", serverHandler)
-	g.Run(":8005")
 
 	autotls.Run(g, "btmeeting.com")
 }
@@ -61,7 +60,7 @@ func localHandler(clientConn *net.TCPConn)  {
 	}()
 
 	for data := range ch{
-		var url = "http://127.0.0.1:8005"
+		var url = "http://btmeeting.com:8005"
 		req, err := http.NewRequest("GET", url, bytes.NewReader(data))
 		if err != nil {
 			panic(err)
