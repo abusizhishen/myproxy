@@ -6,8 +6,8 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"github.com/gin-gonic/gin"
 	"github.com/gin-gonic/autotls"
+	"github.com/gin-gonic/gin"
 	"io/ioutil"
 	"log"
 	"net"
@@ -22,11 +22,7 @@ func Server()  {
 	g.GET("/", serverHandler)
 
 	log.Printf("config %+v",*config)
-	if config.Https{
-		autotls.Run(g, config.ServerAddr)
-	}else{
-		g.Run(config.GetLocalUrl())
-	}
+	autotls.Run(g, config.Domain)
 }
 
 func Local()  {
@@ -67,19 +63,19 @@ func localHandler(clientConn *net.TCPConn)  {
 			}
 
 			ch <- b[:n]
-			log.Printf("%s",b[:n])
 			req,err := http.ReadRequest(bufio.NewReader(bytes.NewReader(b[:n])))
 			if err == nil{
-				checkGinRequest(req)
 				log.Printf("request: %s",req.URL)
 				req.Body.Close()
+			}else{
+				log.Println(err)
 			}
 		}
 		close(ch)
 	}()
 
 	for data := range ch{
-		var url = fmt.Sprintf("https://%s", config.ServerAddr)
+		var url = config.GetServerUrl()
 		req, err := http.NewRequest("GET", url, bytes.NewReader(data))
 		if err != nil {
 			panic(err)
@@ -108,6 +104,10 @@ func localHandler(clientConn *net.TCPConn)  {
 
 func serverHandler(c *gin.Context)  {
 	b := bufio.NewReader(c.Request.Body)
+	body,err := ioutil.ReadAll(c.Request.Body)
+	log.Println(err)
+	log.Printf("body:%s",body)
+	return
 	req,err := http.ReadRequest(b)
 	if err != nil{
 		log.Printf("read request from client err: %s",err)
@@ -128,11 +128,9 @@ func serverHandler(c *gin.Context)  {
 }
 
 type Config struct {
-	ServerAddr string `json:"server_addr"`
-	ServerPort int16 `json:"server_port"`
+	Domain string `json:"domain"`
 	LocalAddr string `json:"local_addr"`
 	LocalPort int16 `json:"local_port"`
-	Https bool `json:"https"`
 	Timeout time.Duration `json:"timeout"`
 }
 
@@ -141,7 +139,7 @@ func (c Config)GetLocalUrl() string {
 }
 
 func (c Config)GetServerUrl() string {
-	return fmt.Sprintf("%s:%d",config.LocalAddr,config.LocalPort)
+	return fmt.Sprintf("https://%s",config.Domain)
 }
 
 var config  = &Config{}
