@@ -12,11 +12,11 @@ import (
 )
 
 type HttpProxy struct {
-	ClientAddr,ServerAddr string
+	Addr
 }
 
-func (p *HttpProxy)Run(fun func(clientConn *net.TCPConn)) {
-	addr, err := net.ResolveTCPAddr("tcp", "0.0.0.0:8080")
+func (p *HttpProxy)Run(fun func(clientConn *net.TCPConn),port int) {
+	addr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf("0.0.0.0:%d", port))
 	listen, err := net.ListenTCP("tcp", addr)
 	if err != nil {
 		panic(err)
@@ -32,14 +32,19 @@ func (p *HttpProxy)Run(fun func(clientConn *net.TCPConn)) {
 	}
 }
 
-func NewHttpServer(addr string)  {
-	var proxy = HttpProxy{ServerAddr: addr}
-	proxy.Run(proxy.serverHandle)
+type Addr struct {
+	LocalPort,ServerPort int
+	ServerIp string
 }
 
-func NewHttpClient(addr string)  {
-	var proxy = HttpProxy{ServerAddr: addr}
-	proxy.Run(proxy.clientHandle)
+func NewHttpServer(addr Addr)  {
+	var proxy = HttpProxy{addr}
+	proxy.Run(proxy.serverHandle, addr.ServerPort)
+}
+
+func NewHttpClient(addr Addr)  {
+	var proxy = HttpProxy{addr}
+	proxy.Run(proxy.clientHandle, addr.LocalPort)
 }
 
 func HandlerSocks(clientConn net.TCPConn) {
@@ -178,11 +183,12 @@ func (p *HttpProxy)serverHandle(client *net.TCPConn) {
 
 	//获得了请求的host和port，向服务端发起tcp连接
 	server, err := net.Dial("tcp", address)
-	defer server.Close()
 	if err != nil {
 		log.Println(err)
 		return
 	}
+	defer server.Close()
+
 	//如果使用https协议，需先向客户端表示连接建立完毕
 	if method == "CONNECT" {
 		fmt.Fprint(client, "HTTP/1.1 200 Connection established\r\n\r\n")
@@ -198,7 +204,7 @@ func (p *HttpProxy)clientHandle(client *net.TCPConn) {
 	defer client.Close()
 	log.Printf("remote addr: %v\n", client.RemoteAddr())
 	//获得了请求的host和port，向服务端发起tcp连接
-	server, err := net.Dial("tcp", p.ClientAddr)
+	server, err := net.Dial("tcp", fmt.Sprintf("%s:%d", p.ServerIp,p.ServerPort))
 	if err != nil {
 		log.Println(err)
 		return
