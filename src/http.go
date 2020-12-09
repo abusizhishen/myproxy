@@ -1,22 +1,22 @@
 package src
 
 import (
-	"bufio"
+	"bytes"
 	"encoding/binary"
-	"io/ioutil"
-	"log"
+	"fmt"
+	log "github.com/sirupsen/logrus"
+	"io"
 	"net"
-	"net/http"
+	"net/url"
 	"strings"
 )
 
 type HttpProxy struct {
-	*http.Request
-	*http.Response
+	ClientAddr,ServerAddr string
 }
 
-func (h *HttpProxy)Server() {
-	addr, err := net.ResolveTCPAddr("tcp", "0.0.0.0:9090")
+func (p *HttpProxy)Run(fun func(clientConn *net.TCPConn)) {
+	addr, err := net.ResolveTCPAddr("tcp", "0.0.0.0:8080")
 	listen, err := net.ListenTCP("tcp", addr)
 	if err != nil {
 		panic(err)
@@ -28,12 +28,21 @@ func (h *HttpProxy)Server() {
 			continue
 		}
 
-		//go handlerSocks(conn)
-		go h.HandlerHttp(conn)
+		go fun(conn)
 	}
 }
 
-func HandlerSocks(clientConn *net.TCPConn) {
+func NewHttpServer(addr string)  {
+	var proxy = HttpProxy{ServerAddr: addr}
+	proxy.Run(proxy.serverHandle)
+}
+
+func NewHttpClient(addr string)  {
+	var proxy = HttpProxy{ServerAddr: addr}
+	proxy.Run(proxy.clientHandle)
+}
+
+func HandlerSocks(clientConn net.TCPConn) {
 	defer clientConn.Close()
 	buf := make([]byte, 256)
 
@@ -132,38 +141,70 @@ func HandlerSocks(clientConn *net.TCPConn) {
 	}
 }
 
-func (h *HttpProxy)HandlerHttp(clientConn *net.TCPConn, ) {
-	buf := make([]byte, 1024)
-	defer clientConn.Close()
-	for {
-		var n, err = clientConn.Read(buf)
-		if err != nil {
-			return
-		}
+func (p *HttpProxy)serverHandle(client *net.TCPConn) {
+	defer client.Close()
+	log.Printf("remote addr: %v\n", client.RemoteAddr())
 
-		var s = bufio.NewReader(strings.NewReader(string(buf[:n])))
-		req, err := http.ReadRequest(s)
-		if err != nil {
-			log.Println(err)
-			return
-		}
-
-		req.RequestURI = ""
-		var c = &http.Client{}
-		resp, err := c.Do(req)
-		if err != nil {
-			log.Println(err)
-			return
-		}
-
-		body, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
-			log.Println(err)
-			return
-		}
-
-		resp.Body.Close()
-		clientConn.Write(body)
-		break
+	// 用来存放客户端数据的缓冲区
+	var b [1024]byte
+	//从客户端获取数据
+	n, err := client.Read(b[:])
+	if err != nil {
+		log.Println(err)
+		return
 	}
+
+	log.Println(string(b[:n]))
+	var method, URL, address string
+	// 从客户端数据读入method，url
+	fmt.Sscanf(string(b[:bytes.IndexByte(b[:], '\n')]), "%s%s", &method, &URL)
+	hostPortURL, err := url.Parse(URL)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+
+	log.Printf("url:%s\n,method:%s\n,address:%s\n", URL, method, address)
+	// 如果方法是CONNECT，则为https协议
+	if method == "CONNECT" {
+		address = hostPortURL.Scheme + ":" + hostPortURL.Opaque
+	} else { //否则为http协议
+		address = hostPortURL.Host
+		// 如果host不带端口，则默认为80
+		if strings.Index(hostPortURL.Host, ":") == -1 { //host不带端口， 默认80
+			address = hostPortURL.Host + ":80"
+		}
+	}
+
+	//获得了请求的host和port，向服务端发起tcp连接
+	server, err := net.Dial("tcp", address)
+	defer server.Close()
+	if err != nil {
+		log.Println(err)
+		return
+	}
+	//如果使用https协议，需先向客户端表示连接建立完毕
+	if method == "CONNECT" {
+		fmt.Fprint(client, "HTTP/1.1 200 Connection established\r\n\r\n")
+	} else { //如果使用http协议，需将从客户端得到的http请求转发给服务端
+		server.Write(b[:n])
+	}
+
+	//将客户端的请求转发至服务端，将服务端的响应转发给客户端。io.Copy为阻塞函数，文件描述符不关闭就不停止
+	go io.Copy(server, client)
+	io.Copy(client, server)
+}
+func (p *HttpProxy)clientHandle(client *net.TCPConn) {
+	defer client.Close()
+	log.Printf("remote addr: %v\n", client.RemoteAddr())
+	//获得了请求的host和port，向服务端发起tcp连接
+	server, err := net.Dial("tcp", p.ClientAddr)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+
+	defer server.Close()
+	go io.Copy(server, client)
+	io.Copy(client, server)
 }
