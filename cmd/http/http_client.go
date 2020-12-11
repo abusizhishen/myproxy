@@ -6,7 +6,7 @@ import (
 
 func main() {
 	proxy := src.Init()
-	src.NewHttpServer(src.Addr{
+	src.NewHttpClient(src.Addr{
 		LocalPort:  proxy.LocalPort,
 		ServerPort: proxy.RemotePort,
 		ServerIp:   proxy.RemoteAddr,
